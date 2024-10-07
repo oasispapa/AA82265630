@@ -47,7 +47,7 @@ jobs:
       # (7) docker image 빌드 및 태깅 - 학습환경은 base 이미지용 ACR과 배포용 ACR이 분리되어 있기때문에 배포용 ACR로 배포하기위해 docker tag 명령어로 변경합니다.
       - name: 'Build & Tag Image'
         run: |
-          docker build -t ${{ secrets.BASEACR_LOGIN_SERVER  }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }} -f Dockerfile-maven .
+          docker build -t ${{ secrets.BASEACR_LOGIN_SERVER  }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }} -f Dockerfile .
           docker tag ${{ secrets.BASEACR_LOGIN_SERVER  }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }} ${{ secrets.STAPACR_LOGIN_SERVER  }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }}
       # (8) 배포 ACR에 로그인 후 이미지 Push
       - name: 'Push image'
