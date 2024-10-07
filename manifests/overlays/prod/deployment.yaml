@@ -1,7 +1,7 @@
 apiVersion : apps/v1
 kind: Deployment
 metadata:
-  name: 82265630
+  name: "82265630"
 spec:
   replicas: 1
   template:
@@ -20,12 +20,12 @@ spec:
             readOnly: true
                           
       volumes:
-      - name: 82265630-volume
+      - name: "82265630-volume"
         persistentVolumeClaim:
           claimName: ce-aa-std-pvc
       - name: application-properties
         configMap:
-          name: 82265630-configmap
+          name: "82265630-configmap"
           items:
             - key: application.yml
               path: application.yml
