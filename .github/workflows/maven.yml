@@ -1,0 +1,86 @@
+# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: github action CI
+
+on: workflow_dispatch
+
+env:
+  IMAGE_NAME: 82265630
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # (1) 프로젝트 소스를 체크아웃 - 아래에서 manifests에 tag(version)을 kustomize를 사용하여 push할때 권한 오류방지를 위해 PAT를 추가합니다.
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.REPO_TOKEN }}
+        
+    # (2) JDK, maven 설치 - spring boot application 패키징을 위해 설치합니다.
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+        
+    # (3) kustomize 설치.
+    - name: Setup Kustomize
+      uses: imranismail/setup-kustomize@v1
+      
+    # (4) shell로 spring boot application 패키징.
+    - name: Build with Maven
+      run: mvn -B package --file pom.xml
+
+    # (5) image Tag 위하여 년월일시분으로 version 변수 할당.
+    - name: 'Gen Version'
+      id: gen-version
+      run: |
+        echo "::set-output name=VERSION::`date +%Y%m%d%H%M`"
+        
+    # (6) docker container image 빌드를 위한 ACR 로그인.
+    - name: 'ACR login'
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ secrets.ACR_LOGIN_SERVER  }}
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    # (7) docker image 빌드 및 태깅
+    - name: 'Build & Tag Image'
+      run: |
+            docker build -t ${{ secrets.ACR_LOGIN_SERVER  }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }} -f Dockerfile-maven .
+    # docker tag ${{ secrets.ACR_LOGIN_SERVER  }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }} ${{ secrets.STAPACR_LOGIN_SERVER  }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }}
+    # (8) 배포 ACR에 로그인 후 이미지 Push
+    - name: 'Push image'
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ secrets.ACR_LOGIN_SERVER  }}
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}    
+    - run: |
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }}
+
+    # (9) kustomize를 사용하여 manifests에 이미지 tag(version) 변경
+    - name: Update Kubernetes resources
+      run: |
+          echo "`ls`"
+          cd manifests/overlays/prod
+          kustomize edit set image ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.gen-version.outputs.VERSION }}
+          cat kustomization.yaml
+
+    # (10) manifests 변경사항 commit & push 하여 AcgoCd 연동.
+    - name: Commit files
+      run: |
+          cd manifests
+          echo "`ls`"
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "github-actions"
+          git commit -am "Update image tag"
+          git push -u origin main
